@@ -2364,10 +2364,7 @@ async def fetch_products_from_rapidapi(query: str) -> List[ProductResult]:
 # client = groq.Client(api_key=GROQ_API_KEY)
 
 
-client = OpenAI(
-    api_key="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",
-    base_url="https://api.groq.com/openai/v1",
-)
+
 
 
 async def get_complementary_products(base_product: str, budget: Optional[float] = None, max_items: int = 5):
