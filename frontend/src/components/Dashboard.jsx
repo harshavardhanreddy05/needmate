@@ -12,7 +12,6 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
 
-
 export default function Dashboard({ user, onLogout }) {
   const [query, setQuery] = useState('');
   const [isListening, setIsListening] = useState(false);
@@ -58,30 +57,62 @@ export default function Dashboard({ user, onLogout }) {
 
   useEffect(() => {
     // Initialize Web Speech API
-    if ('webkitSpeechRecognition' in window) {
-      const recognition = new window.webkitSpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'en-US';
-
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setQuery(transcript);
-        setIsListening(false);
-        toast.success('Voice captured!');
-      };
-
-      recognition.onerror = (event) => {
-        setIsListening(false);
-        toast.error('Voice recognition error');
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
-      recognitionRef.current = recognition;
+    const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+    
+    if (!SpeechRecognition) {
+      console.warn('Speech Recognition API not supported in this browser');
+      return;
     }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      console.log('Voice recognition started');
+    };
+
+    recognition.onresult = (event) => {
+      let interimTranscript = '';
+      let finalTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript + ' ';
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+
+      // Update query with final transcript
+      if (finalTranscript) {
+        setQuery(prev => (prev + ' ' + finalTranscript).trim());
+      }
+    };
+
+    recognition.onerror = (event) => {
+      setIsListening(false);
+      const errorMessages = {
+        'no-speech': 'No speech detected. Please try again.',
+        'audio-capture': 'No microphone found. Please check your microphone settings.',
+        'network': 'Network error. Please check your internet connection.',
+        'permission-denied': 'Microphone permission denied. Please allow microphone access in browser settings.',
+        'not-allowed': 'Microphone access not allowed. Please enable microphone permissions.',
+      };
+      
+      const errorMessage = errorMessages[event.error] || `Voice recognition error: ${event.error}`;
+      console.error('Speech Recognition Error:', event.error);
+      toast.error(errorMessage);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      console.log('Voice recognition ended');
+    };
+
+    recognitionRef.current = recognition;
 
     // Fetch search history
     fetchHistory();
@@ -100,12 +131,50 @@ export default function Dashboard({ user, onLogout }) {
   };
 
   const startVoiceRecognition = () => {
-    if (recognitionRef.current) {
-      setIsListening(true);
-      recognitionRef.current.start();
-    } else {
-      toast.error('Voice recognition not supported in your browser');
+    const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+    
+    if (!SpeechRecognition) {
+      toast.error('Voice recognition not supported in your browser. Try Chrome, Edge, or Safari.');
+      return;
     }
+
+    if (!recognitionRef.current) {
+      toast.error('Voice recognition not initialized. Please refresh the page.');
+      return;
+    }
+
+    // Check for microphone permissions (works in modern browsers)
+    navigator.permissions
+      .query({ name: 'microphone' })
+      .then((result) => {
+        if (result.state === 'denied') {
+          toast.error('Microphone permission denied. Enable it in browser settings.');
+          return;
+        }
+        
+        try {
+          setIsListening(true);
+          recognitionRef.current.start();
+          toast.success('Listening... speak now');
+        } catch (error) {
+          setIsListening(false);
+          console.error('Error starting recognition:', error);
+          toast.error('Failed to start voice recognition. Try again.');
+        }
+      })
+      .catch((error) => {
+        // Fallback for browsers that don't support permissions API
+        console.log('Permissions API not supported, attempting voice recognition anyway');
+        try {
+          setIsListening(true);
+          recognitionRef.current.start();
+          toast.success('Listening... speak now');
+        } catch (error) {
+          setIsListening(false);
+          console.error('Error starting recognition:', error);
+          toast.error('Failed to start voice recognition. Try again.');
+        }
+      });
   };
 
   // const handleSearch = async (e) => {
